@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Gridle - Daily Emoji Puzzle</title>
+    <style>
+        /* --- 极简主义 UI 设计 (Minimalist Dark Theme) --- */
+        :root {
+            --bg-color: #121213;
+            --text-color: #ffffff;
+            --text-secondary: #787c7e;
+            --grid-bg: #1a1a1b;
+            --selected-color: #3a3a3c;
+            --correct-color: #6aaa64;
+            --wrong-color: #e15a60;
+            --border-color: #3a3a3c;
+            --font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-stack);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 100vh;
+            padding: 20px;
+            overflow: hidden;
+        }
+
+        /* 顶部导航栏 */
+        header {
+            width: 100%;
+            max-width: 500px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .subtitle {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        /* 核心游戏区 */
+        main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            max-width: 500px;
+        }
+
+        /* 提示信息 */
+        #instruction {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        /* 4x4 游戏网格 */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            width: 100%;
+            aspect-ratio: 1; /* 保持正方形 */
+            margin-bottom: 20px;
+        }
+
+        /* 网格卡片 */
+        .tile {
+            background-color: var(--grid-bg);
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 32px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        /* 移动端防抖高亮 */
+        @media (hover: hover) {
+            .tile:hover {
+                transform: scale(1.02);
+            }
+        }
+
+        .tile.selected {
+            background-color: var(--selected-color);
+            border-color: #818384;
+        }
+
+        /* 消除成功行的样式 */
+        .tile.resolved {
+            background-color: var(--correct-color);
+            border-color: var(--correct-color);
+            cursor: default;
+            transform: none !important;
+            animation: popIn 0.4s ease forwards;
+        }
+
+        /* 生命值/尝试次数显示 */
+        .attempts-container {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+
+        /* 结算弹窗 (Modal) */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            padding: 20px;
+        }
+
+        .modal-content {
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            padding: 30px;
+            border-radius: 16px;
+            text-align: center;
+            max-width: 360px;
+            width: 100%;
+            box-shadow: 0 4px 23px rgba(0,0,0,0.5);
+            animation: slideUp 0.3s ease-out;
+        }
+
+        .modal h2 {
+            font-size: 24px;
+            margin-bottom: 15px;
+        }
+
+        .stats {
+            margin: 20px 0;
+            font-size: 16px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        /* 裂变核心：分享按钮 */
+        .share-btn {
+            background-color: var(--correct-color);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 24px;
+            cursor: pointer;
+            width: 100%;
+            transition: background 0.2s;
+        }
+
+        .share-btn:active {
+            background-color: #538d4e;
+        }
+
+        /* 浮动提示框（如“已复制到剪贴板”） */
+        .toast {
+            position: fixed;
+            top: 10%;
+            background-color: #fff;
+            color: #000;
+            padding: 10px 20px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: 1000;
+            pointer-events: none;
+        }
+
+        /* 动画效果 */
+        @keyframes popIn {
+            0% { transform: scale(0.8); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(30px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-6px); }
+            40%, 80% { transform: translateX(6px); }
+        }
+
+        .shake {
+            animation: shake 0.4s ease;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div>
+            <h1>Gridle</h1>
+            <div class="subtitle" id="daily-date">Daily Challenge</div>
+        </div>
+    </header>
+
+    <main>
+        <div id="instruction">Find 4 groups of 4 related emojis!</div>
+        
+        <div class="grid" id="game-grid">
+            <!-- JS 动态渲染 16 个格子 -->
+        </div>
+
+        <div class="attempts-container" id="attempts-box">
+            <!-- JS 动态渲染代表机会的 Emoji 🔴 -->
+        </div>
+    </main>
+
+    <!-- 结算弹窗 -->
+    <div class="modal" id="result-modal">
+        <div class="modal-content">
+            <h2 id="modal-title">Splendid!</h2>
+            <div class="stats" id="modal-stats">
+                <!-- 统计数据 -->
+            </div>
+            <button class="share-btn" onclick="shareScore()">🟩 Share Score (Copy)</button>
+        </div>
+    </div>
+
+    <!-- Toast 提示框 -->
+    <div class="toast" id="toast-msg">Copied to clipboard!</div>
+
+    <script>
+        // ==========================================
+        // 1. 关卡题库池 (增长设计：分类明确且跨文化通用)
+        // ==========================================
+        const emojiPool = [
+            { category: "Animals", items: ["🐶", "🐱", "🐭", "🐹"] },
+            { category: "Fruits", items: ["🍎", "🍌", "🍇", "🍊"] },
+            { category: "Hearts", items: ["❤️", "💖", "💙", "💛"] },
+            { category: "Weather", items: ["☀️", "🌧️", "❄️", "⚡"] },
+            { category: "Vehicles", items: ["🚗", "🚲", "✈️", "🚢"] },
+            { category: "Sports", items: ["⚽", "🏀", "🎾", "🏐"] },
+            { category: "Moon", items: ["🌙", "🌕", "🌗", "🌘"] },
+            { category: "Food", items: ["🍔", "🍕", "🍣", "🌮"] },
+            { category: "Clothing", items: ["👕", "👗", "👟", "🎩"] },
+            { category: "Instruments", items: ["🎸", "🎹", "🥁", "🎻"] }
+        ];
+
+        // ==========================================
+        // 2. 核心状态与每日同题伪随机生成器 (PRNG)
+        // ==========================================
+        const today = new Date();
+        const dateStr = today.getFullYear() + String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0');
+        document.getElementById('daily-date').innerText = `🧩 #${dateStr}`;
+
+        // 基于日期的简易伪随机数生成器 (保证全球同题)
+        function seedRandom(seed) {
+            let x = Math.sin(seed++) * 10000;
+            return x - Math.floor(x);
+        }
+
+        // 根据当天的日期数字，从题库抽取 4 个品类
+        function generateDailyPuzzle(dateId) {
+            let seed = parseInt(dateId);
+            let poolCopy = [...emojiPool];
+            let selectedCategories = [];
+            
+            for (let i = 0; i < 4; i++) {
+                let r = seedRandom(seed + i);
+                let index = Math.floor(r * poolCopy.length);
+                selectedCategories.push(poolCopy.splice(index, 1)[0]);
+            }
+            return selectedCategories;
+        }
+
+        // ==========================================
+        // 3. 游戏运行变量与初始化
+        // ==========================================
+        const dailyData = generateDailyPuzzle(dateStr);
+        let allItems = []; // 包含扁平化的16个小方块数据
+        let selectedIndices = []; 
+        let maxAttempts = 4;
+        let remainingAttempts = maxAttempts;
+        let startTime = Date.now();
+        let isGameOver = false;
+
+        // 用于裂变记录的战绩图矩阵 (每一轮提交生成一行)
+        let shareHistoryGrid = []; 
+
+        function initGame() {
+            // 组装 16 个元素
+            dailyData.forEach((cat, catIdx) => {
+                cat.items.forEach(emoji => {
+                    allItems.push({ emoji, catIdx });
+                });
+            });
+
+            // 依据日期生成的 Seed 进行洗牌，确保每个人洗牌结果一致
+            let seed = parseInt(dateStr);
+            for (let i = allItems.length - 1; i > 0; i--) {
+                let r = seedRandom(seed + i);
+                const j = Math.floor(r * (i + 1));
+                [allItems[i], allItems[j]] = [allItems[j], allItems[i]];
+            }
+
+            renderGrid();
+            renderAttempts();
+        }
+
+        // 渲染网格
+        function renderGrid() {
+            const gridContainer = document.getElementById('game-grid');
+            gridContainer.innerHTML = '';
+            allItems.forEach((item, index) => {
+                const tile = document.createElement('div');
+                tile.classList.add('tile');
+                tile.innerText = item.emoji;
+                if (item.resolved) tile.classList.add('resolved');
+                
+                tile.addEventListener('click', () => handleTileClick(index, tile));
+                gridContainer.appendChild(tile);
+            });
+        }
+
+        // 渲染剩余生命值
+        function renderAttempts() {
+            const box = document.getElementById('attempts-box');
+            box.innerHTML = '🟢'.repeat(remainingAttempts);
+        }
+
+        // ==========================================
+        // 4. 玩家操作核心逻辑
+        // ==========================================
+        function handleTileClick(index, tileElement) {
+            if (isGameOver || allItems[index].resolved) return;
+
+            const pos = selectedIndices.indexOf(index);
+            if (pos > -1) {
+                // 取消选择
+                selectedIndices.splice(pos, 1);
+                tileElement.classList.remove('selected');
+            } else {
+                // 选择限制最多4个
+                if (selectedIndices.length < 4) {
+                    selectedIndices.push(index);
+                    tileElement.classList.add('selected');
+                }
+            }
+
+            // 当选满 4 个时，自动触发校验机制
+            if (selectedIndices.length === 4) {
+                setTimeout(checkSubmission, 300); 
+            }
+        }
+
+        // 校验提交的 4 个方块
+        function checkSubmission() {
+            const categoryCounts = {};
+            selectedIndices.forEach(idx => {
+                const catIdx = allItems[idx].catIdx;
+                categoryCounts[catIdx] = (categoryCounts[catIdx] || 0) + 1;
+            });
+
+            // 获取这四个卡片属于哪个分类的最大重复数
+            const maxMatch = Math.max(...Object.values(categoryCounts));
+            
+            // 计算战绩分享符号
+            let historyRow = "";
+            if (maxMatch === 4) {
+                historyRow = "🟩🟩🟩🟩";
+                // 标记为已解开
+                selectedIndices.forEach(idx => allItems[idx].resolved = true);
+                showToast("Perfect!");
+            } else if (maxMatch === 3) {
+                historyRow = "🟨🟨🟨⬛";
+                remainingAttempts--;
+                showToast("One away...");
+                triggerShake();
+            } else {
+                historyRow = "⬛⬛⬛⬛";
+                remainingAttempts--;
+                showToast("Not quite...");
+                triggerShake();
+            }
+
+            shareHistoryGrid.push(historyRow);
+            
+            // 重置选定项样式
+            const tiles = document.querySelectorAll('.tile');
+            selectedIndices.forEach(idx => tiles[idx].classList.remove('selected'));
+            selectedIndices = [];
+
+            renderGrid();
+            renderAttempts();
+            checkGameStatus();
+        }
+
+        // 错选抖动动画
+        function triggerShake() {
+            const grid = document.getElementById('game-grid');
+            grid.classList.add('shake');
+            setTimeout(() => grid.classList.remove('shake'), 400);
+        }
+
+        // ==========================================
+        // 5. 游戏输赢判定与裂变数据结算
+        // ==========================================
+        function checkGameStatus() {
+            const allResolved = allItems.every(item => item.resolved);
+            
+            if (allResolved) {
+                endGame(true);
+            } else if (remainingAttempts <= 0) {
+                endGame(false);
+            }
+        }
+
+        function endGame(isWin) {
+            isGameOver = true;
+            const duration = Math.floor((Date.now() - startTime) / 1000);
+            
+            const modal = document.getElementById('result-modal');
+            const title = document.getElementById('modal-title');
+            const stats = document.getElementById('modal-stats');
+            
+            title.innerText = isWin ? "🎉 Magnificent!" : "😞 Nice Try!";
+            
+            // 计算分数百分比
+            const resolvedCount = allItems.filter(i => i.resolved).length;
+            const scorePercent = Math.round((resolvedCount / 16) * 100);
+
+            stats.innerHTML = `
+                <p><strong>Score:</strong> ${scorePercent}%</p>
+                <p><strong>Time Taken:</strong> ${duration}s</p>
+                <p style="margin-top:10px; font-family:monospace;">${shareHistoryGrid.join('<br>')}</p>
+            `;
+            
+            setTimeout(() => {
+                modal.style.display = 'flex';
+            }, 600);
+        }
+
+        // ==========================================
+        // 6. 核心增长环：复制 Wordle 样式战绩到剪贴板
+        // ==========================================
+        function shareScore() {
+            const duration = Math.floor((Date.now() - startTime) / 1000);
+            const resolvedCount = allItems.filter(i => i.resolved).length;
+            const scorePercent = Math.round((resolvedCount / 16) * 100);
+            
+            // 构建社交裂变文本，确保在 X (Twitter) 上完美排版
+            const shareText = `🧩 Gridle #${dateStr}
+${shareHistoryGrid.join('\n')}
+📊 Score: ${scorePercent}% | ⏱️ Time: ${duration}s
+Play the daily puzzle here: ${window.location.href}`;
+
+            // 使用现代 Clipboard API 复制文本
+            navigator.clipboard.writeText(shareText).then(() => {
+                showToast("Copied to clipboard! Go tweet it!");
+            }).catch(err => {
+                showToast("Failed to copy automatically.");
+            });
+        }
+
+        // 轻量 Toast 提示
+        function showToast(msg) {
+            const toast = document.getElementById('toast-msg');
+            toast.innerText = msg;
+            toast.style.opacity = 1;
+            setTimeout(() => {
+                toast.style.opacity = 0;
+            }, 2000);
+        }
+
+        // 启动游戏
+        window.onload = initGame;
+    </script>
+</body>
+</html>
